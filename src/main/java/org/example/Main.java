@@ -271,7 +271,7 @@ public class Main {
 
     private static boolean updateForecastData(int coordinateId) {
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
-            // Получение данных о координатах
+          
             String query = "SELECT latitude, longitude FROM coordinates WHERE id = ?";
             PreparedStatement statement = connection.prepareStatement(query);
             statement.setInt(1, coordinateId);
@@ -280,7 +280,7 @@ public class Main {
                 double latitude = resultSet.getDouble("latitude");
                 double longitude = resultSet.getDouble("longitude");
 
-                // Получение новых данных прогноза из API
+             
                 String apiUrl = String.format(API_URL, latitude, longitude);
                 String jsonResponse = sendGetRequest(apiUrl);
                 WeatherData weatherData = deserializeWeatherData(jsonResponse);
