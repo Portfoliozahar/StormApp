@@ -28,9 +28,6 @@ public class Main {
 
         Scanner scanner = new Scanner(System.in).useLocale(Locale.US);
 
-// Остальной код
-
-
         while (true) {
             System.out.println("Список команд:");
             System.out.println("1 - Ввести новые координаты");
@@ -116,7 +113,7 @@ public class Main {
                 }
             } catch (InputMismatchException e) {
                 System.out.println("Ошибка: некорректный ввод. Пожалуйста, введите число.");
-                scanner.nextLine(); // Очистка ввода
+                scanner.nextLine();
             }
         }
     }
