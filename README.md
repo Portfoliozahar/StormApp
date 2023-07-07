@@ -9,3 +9,5 @@
 CREATE DATABASE app;
 ```
 
+Папка pack 
+файлы jar для работы 
