@@ -135,7 +135,7 @@ public class Main implements WeatherService {
                     "coordinate_id INT NOT NULL," +
                     "generationtime_ms BIGINT NOT NULL," +
                     "utc_offset_seconds INT NOT NULL," +
-                    "timezone_abbreviation VARCHAR(255) NULL," +
+                    "timezone_abbreviation VARCHAR(255)," +
                     "elevation DOUBLE NOT NULL," +
                     "date_time VARCHAR(255) NOT NULL," +
                     "temperature DOUBLE NOT NULL," +
@@ -144,10 +144,18 @@ public class Main implements WeatherService {
                     ")";
             PreparedStatement forecastStatement = connection.prepareStatement(forecastTableQuery);
             forecastStatement.executeUpdate();
+
+            // Set the default value for timezone_abbreviation column to 'GMT'
+            String alterTableQuery = "ALTER TABLE forecast " +
+                    "ALTER COLUMN timezone_abbreviation SET DEFAULT 'GMT'";
+            PreparedStatement alterTableStatement = connection.prepareStatement(alterTableQuery);
+            alterTableStatement.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
+
+
 
 
 
@@ -325,13 +333,6 @@ public class Main implements WeatherService {
                     PreparedStatement updateStatement = connection.prepareStatement(updateQuery);
                     updateStatement.setLong(1, weatherData.getGenerationTimeMs());
                     updateStatement.setInt(2, weatherData.getUtcOffsetSeconds());
-
-                    if (weatherData.getTimezoneAbbreviation() != null) {
-                        updateStatement.setString(3, weatherData.getTimezoneAbbreviation());
-                    } else {
-                        updateStatement.setNull(3, Types.VARCHAR);
-                    }
-
                     updateStatement.setDouble(4, weatherData.getElevation());
 
                     List<String> dateTimeList = weatherData.getDateTimeList();
@@ -339,6 +340,7 @@ public class Main implements WeatherService {
                     List<Double> precipitationList = weatherData.getPrecipitationList();
 
                     for (int i = 0; i < dateTimeList.size(); i++) {
+                        updateStatement.setString(3, "GMT"); // Set the timezone abbreviation to "GMT"
                         updateStatement.setDouble(5, temperatureList.get(i));
                         updateStatement.setDouble(6, precipitationList.get(i));
                         updateStatement.setInt(7, coordinateId);
@@ -353,6 +355,7 @@ public class Main implements WeatherService {
         }
         return false;
     }
+
 
 
     @Override
