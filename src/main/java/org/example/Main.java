@@ -1,6 +1,4 @@
 package org.example;
-
-
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -17,13 +15,20 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 
-public class Main {
+
+
+public class Main implements WeatherService {
     private static final String API_URL = "https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&hourly=temperature_2m,rain";
     private static final String DB_URL = "jdbc:mysql://localhost:3306/app";
     private static final String DB_USERNAME = "root";
     private static final String DB_PASSWORD = "12345";
 
     public static void main(String[] args) {
+        Main main = new Main();
+        main.startApplication();
+    }
+
+    private void startApplication() {
         createTables();
 
         Scanner scanner = new Scanner(System.in).useLocale(Locale.US);
@@ -42,29 +47,28 @@ public class Main {
                 scanner.nextLine();
 
                 switch (command) {
-                    case 0:
+                    case 0 -> {
                         System.out.println("Выход из приложения...");
                         return;
-                    case 1:
+                    }
+                    case 1 -> {
                         System.out.print("Введите широту: ");
                         double latitude = scanner.nextDouble();
                         scanner.nextLine();
-
                         System.out.print("Введите долготу: ");
                         double longitude = scanner.nextDouble();
                         scanner.nextLine();
-
                         int coordinateId = regLatLong(latitude, longitude);
                         System.out.println("ID сохраненной записи: " + coordinateId);
-                        break;
-                    case 2:
+                    }
+                    case 2 -> {
                         List<LatLongTarget> targets = getAllTargets();
                         System.out.println("Список всех зарегистрированных координат:");
                         for (LatLongTarget target : targets) {
                             System.out.println("ID: " + target.getId() + ", Широта: " + target.getLat() + ", Долгота: " + target.getLong());
                         }
-                        break;
-                    case 3:
+                    }
+                    case 3 -> {
                         System.out.print("Введите ID координаты для обновления данных: ");
                         int coordinateIdToUpdate = scanner.nextInt();
                         scanner.nextLine();
@@ -74,23 +78,21 @@ public class Main {
                         } else {
                             System.out.println("Новые данные отсутствуют.");
                         }
-                        break;
-                    case 4:
+                    }
+                    case 4 -> {
                         System.out.print("Введите ID координаты для получения доступных дат-времени прогноза: ");
                         int coordinateIdForDates = scanner.nextInt();
                         scanner.nextLine();
-
-                        List<LocalDateTime> availableDates = getAvailableForecastAsDateTimeList(coordinateIdForDates);
+                        List<LocalDateTime> availableDates = getAvailableForecastDates(coordinateIdForDates);
                         System.out.println("Список доступных дат-времени прогноза:");
                         for (LocalDateTime dateTime : availableDates) {
                             System.out.println(dateTime);
                         }
-                        break;
-                    case 5:
+                    }
+                    case 5 -> {
                         System.out.print("Введите ID координаты: ");
                         int coordinateIdForForecast = scanner.nextInt();
                         scanner.nextLine();
-
                         System.out.print("Введите дату-время прогноза (yyyy-MM-dd HH:mm): ");
                         String dateTimeStr = scanner.nextLine();
                         try {
@@ -106,10 +108,8 @@ public class Main {
                         } catch (DateTimeParseException e) {
                             System.out.println("Ошибка: неправильный формат даты или времени.");
                         }
-                        break;
-                    default:
-                        System.out.println("Неверная команда.");
-                        break;
+                    }
+                    default -> System.out.println("Неверная команда.");
                 }
             } catch (InputMismatchException e) {
                 System.out.println("Ошибка: некорректный ввод. Пожалуйста, введите число.");
@@ -118,7 +118,7 @@ public class Main {
         }
     }
 
-        private static void createTables() {
+    private void createTables() {
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
             // coordinates
             String coordinatesTableQuery = "CREATE TABLE IF NOT EXISTS coordinates (" +
@@ -145,7 +145,8 @@ public class Main {
         }
     }
 
-    private static int regLatLong(double latitude, double longitude) {
+    @Override
+    public int regLatLong(double latitude, double longitude) {
         try {
             // запрос API
             String apiUrl = String.format(API_URL, latitude, longitude);
@@ -163,7 +164,7 @@ public class Main {
         return -1;
     }
 
-    private static String sendGetRequest(String apiUrl) throws IOException {
+    private String sendGetRequest(String apiUrl) throws IOException {
         URL url = new URL(apiUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
@@ -187,7 +188,7 @@ public class Main {
         return null;
     }
 
-    private static WeatherData deserializeWeatherData(String jsonResponse) {
+    private WeatherData deserializeWeatherData(String jsonResponse) {
         Gson gson = new Gson();
         JsonParser jsonParser = new JsonParser();
         JsonElement rootElement = jsonParser.parse(jsonResponse);
@@ -213,7 +214,7 @@ public class Main {
         return weatherData;
     }
 
-    private static int saveToDatabase(double latitude, double longitude, WeatherData weatherData) {
+    private int saveToDatabase(double latitude, double longitude, WeatherData weatherData) {
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
 
             String coordinatesQuery = "INSERT INTO coordinates (latitude, longitude) VALUES (?, ?)";
@@ -251,7 +252,8 @@ public class Main {
         return -1;
     }
 
-    private static List<LocalDateTime> getAvailableForecastAsDateTimeList(int coordinateId) {
+    @Override
+    public List<LocalDateTime> getAvailableForecastDates(int coordinateId) {
         List<LocalDateTime> dateTimeList = new ArrayList<>();
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
             String query = "SELECT date_time FROM forecast WHERE coordinate_id = ?";
@@ -269,9 +271,10 @@ public class Main {
         return dateTimeList;
     }
 
-    private static boolean updateForecastData(int coordinateId) {
+    @Override
+    public boolean updateForecastData(int coordinateId) {
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
-          
+
             String query = "SELECT latitude, longitude FROM coordinates WHERE id = ?";
             PreparedStatement statement = connection.prepareStatement(query);
             statement.setInt(1, coordinateId);
@@ -280,7 +283,6 @@ public class Main {
                 double latitude = resultSet.getDouble("latitude");
                 double longitude = resultSet.getDouble("longitude");
 
-             
                 String apiUrl = String.format(API_URL, latitude, longitude);
                 String jsonResponse = sendGetRequest(apiUrl);
                 WeatherData weatherData = deserializeWeatherData(jsonResponse);
@@ -303,8 +305,8 @@ public class Main {
         return false;
     }
 
-
-    private static ForecastResponse getForecastByDateTime(int coordinateId, LocalDateTime dateTime) {
+    @Override
+    public ForecastResponse getForecastByDateTime(int coordinateId, LocalDateTime dateTime) {
         ForecastResponse forecastResponse = null;
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
             String query = "SELECT temperature, precipitation FROM forecast WHERE coordinate_id = ? AND date_time = ?";
@@ -323,7 +325,8 @@ public class Main {
         return forecastResponse;
     }
 
-    private static List<LatLongTarget> getAllTargets() {
+    @Override
+    public List<LatLongTarget> getAllTargets() {
         List<LatLongTarget> targets = new ArrayList<>();
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
             String query = "SELECT id, latitude, longitude FROM coordinates";
@@ -342,3 +345,4 @@ public class Main {
         return targets;
     }
 }
+
