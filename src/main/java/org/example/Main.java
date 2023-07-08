@@ -145,7 +145,7 @@ public class Main implements WeatherService {
             PreparedStatement forecastStatement = connection.prepareStatement(forecastTableQuery);
             forecastStatement.executeUpdate();
 
-            // Set the default value for timezone_abbreviation column to 'GMT'
+
             String alterTableQuery = "ALTER TABLE forecast " +
                     "ALTER COLUMN timezone_abbreviation SET DEFAULT 'GMT'";
             PreparedStatement alterTableStatement = connection.prepareStatement(alterTableQuery);
