@@ -133,6 +133,10 @@ public class Main implements WeatherService {
             String forecastTableQuery = "CREATE TABLE IF NOT EXISTS forecast (" +
                     "id INT AUTO_INCREMENT PRIMARY KEY," +
                     "coordinate_id INT NOT NULL," +
+                    "generationtime_ms BIGINT NOT NULL," +
+                    "utc_offset_seconds INT NOT NULL," +
+                    "timezone_abbreviation VARCHAR(255) NULL," +
+                    "elevation DOUBLE NOT NULL," +
                     "date_time VARCHAR(255) NOT NULL," +
                     "temperature DOUBLE NOT NULL," +
                     "precipitation DOUBLE NOT NULL," +
@@ -144,6 +148,8 @@ public class Main implements WeatherService {
             e.printStackTrace();
         }
     }
+
+
 
     @Override
     public int regLatLong(double latitude, double longitude) {
@@ -196,23 +202,43 @@ public class Main implements WeatherService {
 
         WeatherData weatherData = new WeatherData();
 
-        JsonArray temperatureArray = jsonObject.getAsJsonObject("hourly").getAsJsonArray("temperature_2m");
-        if (temperatureArray.size() > 0) {
-            weatherData.setTemperature(temperatureArray.get(0).getAsDouble());
-        }
+        JsonObject hourlyObject = jsonObject.getAsJsonObject("hourly");
 
-        JsonArray precipitationArray = jsonObject.getAsJsonObject("hourly").getAsJsonArray("rain");
-        if (precipitationArray.size() > 0) {
-            weatherData.setPrecipitation(precipitationArray.get(0).getAsDouble());
-        }
 
-        JsonArray timeArray = jsonObject.getAsJsonObject("hourly").getAsJsonArray("time");
-        if (timeArray.size() > 0) {
-            weatherData.setDateTime(timeArray.get(0).getAsString());
+        JsonArray timeArray = hourlyObject.getAsJsonArray("time");
+        List<String> dateTimeList = new ArrayList<>();
+        for (JsonElement timeElement : timeArray) {
+            dateTimeList.add(timeElement.getAsString());
         }
+        weatherData.setDateTimeList(dateTimeList);
+
+
+        JsonArray temperatureArray = hourlyObject.getAsJsonArray("temperature_2m");
+        List<Double> temperatureList = new ArrayList<>();
+        for (JsonElement temperatureElement : temperatureArray) {
+            temperatureList.add(temperatureElement.getAsDouble());
+        }
+        weatherData.setTemperatureList(temperatureList);
+
+
+        JsonArray precipitationArray = hourlyObject.getAsJsonArray("rain");
+        List<Double> precipitationList = new ArrayList<>();
+        for (JsonElement precipitationElement : precipitationArray) {
+            precipitationList.add(precipitationElement.getAsDouble());
+        }
+        weatherData.setPrecipitationList(precipitationList);
+
+
+        JsonObject hourlyUnitsObject = jsonObject.getAsJsonObject("hourly_units");
+        String temperatureUnit = hourlyUnitsObject.get("temperature_2m").getAsString();
+        String precipitationUnit = hourlyUnitsObject.get("rain").getAsString();
+
+        weatherData.setTemperatureUnit(temperatureUnit);
+        weatherData.setPrecipitationUnit(precipitationUnit);
 
         return weatherData;
     }
+
 
     private int saveToDatabase(double latitude, double longitude, WeatherData weatherData) {
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
@@ -228,21 +254,27 @@ public class Main implements WeatherService {
                 if (generatedKeys.next()) {
                     int coordinateId = generatedKeys.getInt(1);
 
-
-                    String forecastQuery = "INSERT INTO forecast (coordinate_id, date_time, temperature, precipitation) VALUES (?, ?, ?, ?)";
+                    String forecastQuery = "INSERT INTO forecast (coordinate_id, generationtime_ms, utc_offset_seconds, timezone_abbreviation, elevation, date_time, temperature, precipitation) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
                     PreparedStatement forecastStatement = connection.prepareStatement(forecastQuery, Statement.RETURN_GENERATED_KEYS);
                     forecastStatement.setInt(1, coordinateId);
-                    forecastStatement.setString(2, weatherData.getDateTime());
-                    forecastStatement.setDouble(3, weatherData.getTemperature());
-                    forecastStatement.setDouble(4, weatherData.getPrecipitation());
+                    forecastStatement.setLong(2, weatherData.getGenerationTimeMs());
+                    forecastStatement.setInt(3, weatherData.getUtcOffsetSeconds());
+                    forecastStatement.setString(4, weatherData.getTimezoneAbbreviation());
+                    forecastStatement.setDouble(5, weatherData.getElevation());
 
-                    rowsAffected = forecastStatement.executeUpdate();
-                    if (rowsAffected > 0) {
-                        generatedKeys = forecastStatement.getGeneratedKeys();
-                        if (generatedKeys.next()) {
-                            return generatedKeys.getInt(1);
-                        }
+                    List<String> dateTimeList = weatherData.getDateTimeList();
+                    List<Double> temperatureList = weatherData.getTemperatureList();
+                    List<Double> precipitationList = weatherData.getPrecipitationList();
+
+                    for (int i = 0; i < dateTimeList.size(); i++) {
+                        forecastStatement.setString(6, dateTimeList.get(i));
+                        forecastStatement.setDouble(7, temperatureList.get(i));
+                        forecastStatement.setDouble(8, precipitationList.get(i));
+                        forecastStatement.executeUpdate();
                     }
+
+                    return coordinateId;
                 }
             }
         } catch (SQLException e) {
@@ -251,6 +283,7 @@ public class Main implements WeatherService {
 
         return -1;
     }
+
 
     @Override
     public List<LocalDateTime> getAvailableForecastDates(int coordinateId) {
@@ -274,7 +307,6 @@ public class Main implements WeatherService {
     @Override
     public boolean updateForecastData(int coordinateId) {
         try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
-
             String query = "SELECT latitude, longitude FROM coordinates WHERE id = ?";
             PreparedStatement statement = connection.prepareStatement(query);
             statement.setInt(1, coordinateId);
@@ -288,15 +320,32 @@ public class Main implements WeatherService {
                 WeatherData weatherData = deserializeWeatherData(jsonResponse);
 
                 if (weatherData != null) {
-
-                    String updateQuery = "UPDATE forecast SET temperature = ?, precipitation = ? WHERE coordinate_id = ?";
+                    String updateQuery = "UPDATE forecast SET generationtime_ms = ?, utc_offset_seconds = ?, timezone_abbreviation = ?, elevation = ?, " +
+                            "temperature = ?, precipitation = ? WHERE coordinate_id = ?";
                     PreparedStatement updateStatement = connection.prepareStatement(updateQuery);
-                    updateStatement.setDouble(1, weatherData.getTemperature());
-                    updateStatement.setDouble(2, weatherData.getPrecipitation());
-                    updateStatement.setInt(3, coordinateId);
-                    int rowsAffected = updateStatement.executeUpdate();
+                    updateStatement.setLong(1, weatherData.getGenerationTimeMs());
+                    updateStatement.setInt(2, weatherData.getUtcOffsetSeconds());
 
-                    return rowsAffected > 0;
+                    if (weatherData.getTimezoneAbbreviation() != null) {
+                        updateStatement.setString(3, weatherData.getTimezoneAbbreviation());
+                    } else {
+                        updateStatement.setNull(3, Types.VARCHAR);
+                    }
+
+                    updateStatement.setDouble(4, weatherData.getElevation());
+
+                    List<String> dateTimeList = weatherData.getDateTimeList();
+                    List<Double> temperatureList = weatherData.getTemperatureList();
+                    List<Double> precipitationList = weatherData.getPrecipitationList();
+
+                    for (int i = 0; i < dateTimeList.size(); i++) {
+                        updateStatement.setDouble(5, temperatureList.get(i));
+                        updateStatement.setDouble(6, precipitationList.get(i));
+                        updateStatement.setInt(7, coordinateId);
+                        updateStatement.executeUpdate();
+                    }
+
+                    return true;
                 }
             }
         } catch (SQLException | IOException e) {
@@ -304,6 +353,7 @@ public class Main implements WeatherService {
         }
         return false;
     }
+
 
     @Override
     public ForecastResponse getForecastByDateTime(int coordinateId, LocalDateTime dateTime) {
